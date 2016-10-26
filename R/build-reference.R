@@ -50,6 +50,7 @@ build_reference <- function(pkg = ".",
                             depth = 1L
                             ) {
   pkg <- as_pkgdown(pkg)
+  path <- rel_path(path, pkg$path)
 
   rule("Building function reference")
   if (!is.null(path)) {
@@ -75,6 +76,18 @@ build_reference <- function(pkg = ".",
 
   invisible()
 }
+
+#' @export
+#' @rdname build_reference
+build_reference_index <- function(pkg = ".", path = "docs/reference", depth = 1L) {
+  render_page(
+    pkg, "reference-index",
+    data = data_reference_index(pkg, depth = depth),
+    path = out_path(path, "index.html"),
+    depth = depth
+  )
+}
+
 
 build_reference_topic <- function(topic,
                                   pkg,
@@ -165,9 +178,18 @@ data_reference_topic <- function(topic,
   )
   sections <- topic$rd[tag_names %in% section_tags]
   out$sections <- sections %>%
-    purrr::map(as_data, index = pkg$topics, current = topic$name)
+    purrr::map(as_data, index = pkg$topics, current = topic$name) %>%
+    purrr::map(add_slug)
 
   out
 }
 
-
+add_slug <- function(x) {
+  x$slug <- make_slug(x$title)
+  x
+}
+make_slug <- function(x) {
+  x <- tolower(x)
+  x <- gsub("[^a-z]+", "-", x)
+  x
+}
