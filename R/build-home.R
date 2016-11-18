@@ -19,6 +19,9 @@
 #'     href: http://website.com
 #' }
 #'
+#' The "developers" list is populated by the maintainer ("cre"), authors
+#' ("aut"), and funder ("fnd").
+#'
 #' @inheritParams build_articles
 #' @export
 build_home <- function(pkg = ".", path = "docs", depth = 0L) {
@@ -33,6 +36,9 @@ build_home <- function(pkg = ".", path = "docs", depth = 0L) {
   if (file.exists(license_path)) {
     file.copy(license_path, path)
   }
+
+  # Build authors page
+  build_authors(pkg, path = path, depth = depth)
 
   if (identical(tools::file_ext(data$path), "Rmd")) {
     # Render once so that .md is up to date
@@ -71,7 +77,7 @@ build_home <- function(pkg = ".", path = "docs", depth = 0L) {
 tweak_homepage_html <- function(html, strip_header = FALSE) {
   first_para <- xml2::xml_find_first(html, "//p")
   badges <- first_para %>% xml2::xml_children()
-  has_badges <- all(xml2::xml_name(badges) %in% "a")
+  has_badges <- length(badges) > 0 && all(xml2::xml_name(badges) %in% "a")
 
   if (has_badges) {
     list <- list_with_heading(badges, "Dev status")
@@ -117,10 +123,13 @@ data_home <- function(pkg = ".") {
 }
 
 data_home_sidebar <- function(pkg = ".") {
+  if (!is.null(pkg$meta$home$sidebar))
+    return(pkg$meta$home$sidebar)
+
   paste0(
     data_home_sidebar_links(pkg),
-    data_home_sidebar_authors(pkg),
     data_home_sidebar_license(pkg),
+    data_home_sidebar_authors(pkg),
     collapse = "\n"
   )
 }
@@ -166,7 +175,9 @@ data_link_meta <- function(pkg = ".") {
   if (length(links) == 0)
     return(character())
 
-  purrr::map_chr(links, ~ paste0("<li><a href='", . $href, "'>", .$text, "</a></li>"))
+  links %>%
+    purrr::transpose() %>%
+    purrr::pmap_chr(link_url)
 }
 
 data_link_github <- function(pkg = ".") {
@@ -213,6 +224,7 @@ on_cran <- function(pkg) {
   pkg %in% rownames(pkgs)
 }
 
-link_url <- function(text, url) {
-  paste0(text, " at <a href='", url, "'>", url, "</a>")
+link_url <- function(text, href) {
+  label <- gsub("(/+)", "\\1&#8203;", href)
+  paste0(text, " at <br /><a href='", href, "'>", label, "</a>")
 }

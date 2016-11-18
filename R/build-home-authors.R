@@ -1,3 +1,35 @@
+data_authors <- function(pkg = ".") {
+  pkg <- as_pkgdown(pkg)
+  author_info <- data_author_info(pkg)
+
+  all <- pkg %>%
+    pkg_authors() %>%
+    purrr::map(author_list, author_info)
+
+  main <- pkg %>%
+    pkg_authors(c("aut", "cre", "fnd")) %>%
+    purrr::map(author_list, author_info)
+
+  needs_page <- length(main) != length(all)
+
+  print_yaml(list(
+    all = all,
+    main = main,
+    needs_page = needs_page
+  ))
+}
+
+pkg_authors <- function(pkg, role = NULL) {
+  authors <- unclass(pkg$desc$get_authors())
+
+  if (is.null(role)) {
+    authors
+  } else {
+    purrr::keep(authors, ~ any(.$role %in% role))
+  }
+}
+
+
 data_author_info <- function(pkg = ".") {
   pkg <- as_pkgdown(pkg)
 
@@ -14,25 +46,32 @@ data_author_info <- function(pkg = ".") {
   utils::modifyList(defaults, pkg$meta$authors %||% list())
 }
 
+
 data_home_sidebar_authors <- function(pkg = ".") {
   pkg <- as_pkgdown(pkg)
+  data <- data_authors(pkg)
 
-  authors <- pkg$desc$get_authors()
-  if (is.null(authors))
-    return()
+  authors <- data$main %>% purrr::map_chr(author_desc)
+  if (data$needs_page) {
+    authors <- c(authors, "<a href='authors.html'>All authors...</li>")
+  }
 
-  pkg$desc$get_authors() %>%
-    unclass() %>%
-    purrr::map_chr(author_desc, authors = data_author_info(pkg)) %>%
-    list_with_heading("Authors")
+  list_with_heading(authors, "Developers")
+}
+
+build_authors <- function(pkg = ".", path = "docs", depth = 0L) {
+  pkg <- as_pkgdown(pkg)
+
+  data <- list(
+    pagetitle = "Authors",
+    authors = data_authors(pkg)$all
+  )
+
+  render_page(pkg, "authors", data, file.path(path, "authors.html"), depth = depth)
 }
 
 author_name <- function(x, authors) {
-  if (is.null(x$family)) {
-    name <- x$given
-  } else {
-    name <- paste0(x$given, " ", x$family)
-  }
+  name <- format_author_name(x$given, x$family)
 
   if (!(name %in% names(authors)))
     return(name)
@@ -50,33 +89,42 @@ author_name <- function(x, authors) {
   }
 }
 
-author_desc <- function(x, authors) {
-  desc <- author_name(x, authors)
+format_author_name <- function(given, family) {
+  given <- paste(given, collapse = " ")
 
-  if (!is.null(x$comment)) {
-    desc <- paste0(desc, " <small>", x$comment, "</small>")
+  if (is.null(family)) {
+    given
+  } else {
+    paste0(given, " ", family)
   }
+}
+
+author_list <- function(x, authors_info, comment = FALSE) {
+  name <- author_name(x, authors_info)
 
   roles <- paste0(role_lookup[x$role], collapse = ", ")
   substr(roles, 1, 1) <- toupper(substr(roles, 1, 1))
-  desc <- paste0(desc, "<br /><small class = 'roles'>", roles, "</span>")
 
-  desc
+  list(
+    name = name,
+    roles = roles,
+    comment = x$comment
+  )
 }
 
-author_type <- function(x) {
-  if ("cre" %in% x$role) {
-    "cre"
-  } else if ("aut" %in% x$role) {
-    "aut"
-  } else {
-    "other"
-  }
+author_desc <- function(x, comment = TRUE) {
+  paste(
+    x$name,
+    "<br />\n<small class = 'roles'>", x$roles, "</small>",
+    if (comment && !is.null(x$comment))
+      paste0("<br/>\n<small>(", x$comment, ")</small>")
+  )
 }
 
 role_lookup <- c(
   "aut" = "author",
   "com" = "compiler",
+  "fnd" = "funder",
   "ctb" = "contributor",
   "cph" = "copyright&nbsp;holder",
   "cre" = "maintainer",
@@ -85,15 +133,3 @@ role_lookup <- c(
   "ths" = "thesis&nbsp;advisor",
   "trl" = "translator"
 )
-
-itemize <- function(header, x) {
-  if (length(x) == 0)
-    return()
-
-  paste0(
-    header, "\n",
-    "\\itemize{\n",
-    paste0("  \\item ", x, "\n", collapse = ""),
-    "}\n"
-  )
-}
